@@ -1,0 +1,86 @@
+/* SweetAlert2 Custom Styles */
+.swal2-popup {
+  padding: 2rem !important;
+}
+
+.swal2-actions {
+  margin-top: 2rem !important;
+  display: flex !important;
+  justify-content: center !important;
+  gap: 1rem !important;
+}
+
+.swal2-confirm,
+.swal2-cancel {
+  padding: 0.75rem 1.5rem !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  border-radius: 0.375rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 120px !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.swal2-confirm {
+  background-color: #dc3545 !important;
+  color: white !important;
+  border: none !important;
+}
+
+.swal2-confirm:hover {
+  background-color: #c82333 !important;
+}
+
+.swal2-cancel {
+  background-color: #6c757d !important;
+  color: white !important;
+  border: none !important;
+}
+
+.swal2-cancel:hover {
+  background-color: #5a6268 !important;
+}
+
+/* Success button styles */
+.swal2-confirm.swal2-confirm-success {
+  background-color: #28a745 !important;
+}
+
+.swal2-confirm.swal2-confirm-success:hover {
+  background-color: #218838 !important;
+}
+
+/* Error button styles */
+.swal2-confirm.swal2-confirm-error {
+  background-color: #dc3545 !important;
+}
+
+.swal2-confirm.swal2-confirm-error:hover {
+  background-color: #c82333 !important;
+}
+
+/* Make sure buttons are always visible */
+.swal2-actions button {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: inline-flex !important;
+}
+
+/* Improve button contrast */
+.swal2-confirm:not([disabled]):hover,
+.swal2-cancel:not([disabled]):hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Add focus styles for accessibility */
+.swal2-confirm:focus,
+.swal2-cancel:focus {
+  outline: 2px solid #4a90e2 !important;
+  outline-offset: 2px !important;
+}
