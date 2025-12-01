@@ -281,53 +281,135 @@ const AdminDashboard = () => {
   };
 
   // Fetch pending approvals
-  const fetchPendingApprovals = async () => {
+  const fetchPendingApprovals = async (signal = null) => {
     setLoading(true);
     try {
       const [productsData, sellersData] = await Promise.all([
-        dashboardService.getPendingProducts(),
-        dashboardService.getPendingSellers()
+        dashboardService.getPendingProducts(signal),
+        dashboardService.getPendingSellers(signal)
       ]);
+      
+      if (signal?.aborted) return;
+      
       setPendingProducts(productsData);
       setPendingSellers(sellersData);
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        return;
+      }
       console.error('Error fetching pending approvals:', error);
       toast.error('Failed to fetch pending approvals');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
     if (activeTab === 'approvals') {
-      fetchPendingApprovals();
+      const fetchWithCleanup = async () => {
+        if (!isMounted) return;
+        try {
+          await fetchPendingApprovals(abortController.signal);
+        } catch (error) {
+          if (isMounted && error.name !== 'AbortError' && error.name !== 'CanceledError') {
+            console.error('Error fetching pending approvals:', error);
+          }
+        }
+      };
+      fetchWithCleanup();
     }
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [activeTab]);
 
   // Fetch complaints when complaints tab is active
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
     if (activeTab === 'complaints') {
-      fetchComplaints(1, complaintFilters);
+      const fetchWithCleanup = async () => {
+        if (!isMounted) return;
+        try {
+          await fetchComplaints(1, complaintFilters, abortController.signal);
+        } catch (error) {
+          if (isMounted && error.name !== 'AbortError' && error.name !== 'CanceledError') {
+            console.error('Error fetching complaints:', error);
+          }
+        }
+      };
+      fetchWithCleanup();
     }
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [activeTab]);
 
   // Fetch orders when orders tab is active
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
     if (activeTab === 'orders') {
-      fetchOrders(1, orderFilters);
-      fetchOrderStats();
+      const fetchWithCleanup = async () => {
+        if (!isMounted) return;
+        try {
+          await Promise.all([
+            fetchOrders(1, orderFilters),
+            fetchOrderStats()
+          ]);
+        } catch (error) {
+          if (isMounted && error.name !== 'AbortError' && error.name !== 'CanceledError') {
+            console.error('Error fetching orders:', error);
+          }
+        }
+      };
+      fetchWithCleanup();
     }
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [activeTab]);
 
   // Fetch users when users tab is active
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
     if (activeTab === 'users') {
-      if (activeUserType === 'buyers') {
-        fetchBuyers(1, userFilters);
-      } else {
-        fetchSellers(1, userFilters);
-      }
+      const fetchWithCleanup = async () => {
+        if (!isMounted) return;
+        try {
+          if (activeUserType === 'buyers') {
+            await fetchBuyers(1, userFilters);
+          } else {
+            await fetchSellers(1, userFilters);
+          }
+        } catch (error) {
+          if (isMounted && error.name !== 'AbortError' && error.name !== 'CanceledError') {
+            console.error('Error fetching users:', error);
+          }
+        }
+      };
+      fetchWithCleanup();
     }
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [activeTab, activeUserType]);
 
   // Handle product approval
@@ -355,11 +437,14 @@ const AdminDashboard = () => {
   };
 
   // Fetch dashboard stats
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = async (signal = null) => {
     setLoading(true);
     setError(null);
     try {
-      const statsData = await dashboardService.getDashboardStats();
+      const statsData = await dashboardService.getDashboardStats(signal);
+      
+      if (signal?.aborted) return;
+      
       console.log('Dashboard stats received:', statsData);
       
       setStats(statsData);
@@ -370,6 +455,9 @@ const AdminDashboard = () => {
         activeUsers: (statsData?.activeBuyers || 0) + (statsData?.activeSellers || 0)
       });
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        return;
+      }
       console.error('Error fetching dashboard stats:', error);
       setError(error.message || 'Failed to fetch dashboard statistics');
       toast.error(error.message || 'Failed to fetch dashboard statistics');
@@ -387,15 +475,76 @@ const AdminDashboard = () => {
         activeUsers: 0
       });
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   // Fetch unverified sellers - only call after authentication is confirmed
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
     if (!authLoading && !isCheckingAuth && user && user.role === 'admin') {
-      fetchUnverifiedSellers();
+      const fetchWithCleanup = async () => {
+        if (!isMounted) return;
+        try {
+          const token = localStorage.getItem('token');
+          console.log('Fetching unverified sellers with token:', token ? 'Token exists' : 'No token');
+          
+          if (!token) {
+            console.error('No token found');
+            if (isMounted) {
+              toast.error('Please login to access admin dashboard');
+            }
+            return;
+          }
+
+          console.log('Using API URL:', API_URL);
+          console.log('Fetching unverified sellers from:', `${API_URL}/api/v1/admin/sellers/unverified`);
+          
+          const response = await axios.get(`${API_URL}/api/v1/admin/sellers/unverified`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: abortController.signal
+          });
+
+          if (!isMounted) return;
+
+          console.log('Unverified sellers response:', response.data);
+          setUnverifiedSellers(response.data);
+          setLoading(false);
+        } catch (error) {
+          if (!isMounted) return;
+          
+          // Ignore abort errors
+          if (error.name === 'AbortError' || error.name === 'CanceledError') {
+            return;
+          }
+          
+          console.error('Error fetching unverified sellers:', error);
+          console.error('Error response:', error.response?.data);
+          console.error('Error status:', error.response?.status);
+          console.error('Error headers:', error.response?.headers);
+          
+          if (error.response?.status === 401) {
+            toast.error('Authentication failed. Please login again.');
+            navigate('/signin');
+          } else if (error.response?.status === 403) {
+            toast.error('Access denied. Admin privileges required.');
+          } else {
+            toast.error('Failed to fetch unverified sellers');
+          }
+          setLoading(false);
+        }
+      };
+      fetchWithCleanup();
     }
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [authLoading, isCheckingAuth, user]);
 
   const fetchUnverifiedSellers = async () => {
@@ -480,7 +629,26 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
-    fetchDashboardStats();
+    let isMounted = true;
+    const abortController = new AbortController();
+
+    const fetchWithCleanup = async () => {
+      if (!isMounted) return;
+      try {
+        await fetchDashboardStats(abortController.signal);
+      } catch (error) {
+        if (isMounted && error.name !== 'AbortError' && error.name !== 'CanceledError') {
+          console.error('Error fetching dashboard stats:', error);
+        }
+      }
+    };
+
+    fetchWithCleanup();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, []);
 
   const handleLogout = () => {
@@ -489,7 +657,7 @@ const AdminDashboard = () => {
   };
 
   // User management functions
-  const fetchBuyers = async (page = 1, filters = {}) => {
+  const fetchBuyers = async (page = 1, filters = {}, signal = null) => {
     setUserManagementLoading(true);
     try {
       const token = localStorage.getItem('token');
@@ -500,23 +668,36 @@ const AdminDashboard = () => {
         status: filters.status || 'all'
       });
 
-      const response = await axios.get(`${API_URL}/api/v1/admin/buyers?${params}`, {
+      const axiosConfig = {
         headers: { Authorization: `Bearer ${token}` }
-      });
+      };
+      
+      if (signal) {
+        axiosConfig.signal = signal;
+      }
+
+      const response = await axios.get(`${API_URL}/api/v1/admin/buyers?${params}`, axiosConfig);
+
+      if (signal?.aborted) return;
 
       if (response.data.success) {
         setRealBuyers(response.data.data.buyers);
         setUserPagination(response.data.data.pagination);
       }
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        return;
+      }
       console.error('Error fetching buyers:', error);
       toast.error('Failed to fetch buyers');
     } finally {
-      setUserManagementLoading(false);
+      if (!signal?.aborted) {
+        setUserManagementLoading(false);
+      }
     }
   };
 
-  const fetchSellers = async (page = 1, filters = {}) => {
+  const fetchSellers = async (page = 1, filters = {}, signal = null) => {
     setUserManagementLoading(true);
     try {
       const token = localStorage.getItem('token');
@@ -528,19 +709,32 @@ const AdminDashboard = () => {
         verification: filters.verification || 'all'
       });
 
-      const response = await axios.get(`${API_URL}/api/v1/admin/sellers?${params}`, {
+      const axiosConfig = {
         headers: { Authorization: `Bearer ${token}` }
-      });
+      };
+      
+      if (signal) {
+        axiosConfig.signal = signal;
+      }
+
+      const response = await axios.get(`${API_URL}/api/v1/admin/sellers?${params}`, axiosConfig);
+
+      if (signal?.aborted) return;
 
       if (response.data.success) {
         setRealSellers(response.data.data.sellers);
         setUserPagination(response.data.data.pagination);
       }
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        return;
+      }
       console.error('Error fetching sellers:', error);
       toast.error('Failed to fetch sellers');
     } finally {
-      setUserManagementLoading(false);
+      if (!signal?.aborted) {
+        setUserManagementLoading(false);
+      }
     }
   };
 
@@ -599,7 +793,7 @@ const AdminDashboard = () => {
   };
 
   // Order management functions
-  const fetchOrders = async (page = 1, filters = {}) => {
+  const fetchOrders = async (page = 1, filters = {}, signal = null) => {
     try {
       setOrdersLoading(true);
       
@@ -609,36 +803,60 @@ const AdminDashboard = () => {
         ...filters
       });
 
-      const response = await axios.get(`${API_URL}/api/v1/admin/orders?${params}`, {
+      const axiosConfig = {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
-      });
+      };
+      
+      if (signal) {
+        axiosConfig.signal = signal;
+      }
+
+      const response = await axios.get(`${API_URL}/api/v1/admin/orders?${params}`, axiosConfig);
+
+      if (signal?.aborted) return;
 
       if (response.data.success) {
         setOrders(response.data.orders);
         setOrderPagination(response.data.pagination);
       }
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        return;
+      }
       console.error('Error fetching orders:', error);
       toast.error('Error fetching orders');
     } finally {
-      setOrdersLoading(false);
+      if (!signal?.aborted) {
+        setOrdersLoading(false);
+      }
     }
   };
 
-  const fetchOrderStats = async () => {
+  const fetchOrderStats = async (signal = null) => {
     try {
-      const response = await axios.get(`${API_URL}/api/v1/admin/orders/stats`, {
+      const axiosConfig = {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
-      });
+      };
+      
+      if (signal) {
+        axiosConfig.signal = signal;
+      }
+
+      const response = await axios.get(`${API_URL}/api/v1/admin/orders/stats`, axiosConfig);
+
+      if (signal?.aborted) return;
 
       if (response.data.success) {
         setOrderStats(response.data.stats);
       }
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        return;
+      }
       console.error('Error fetching order stats:', error);
     }
   };
@@ -663,7 +881,7 @@ const AdminDashboard = () => {
   };
 
   // Complaints management functions
-  const fetchComplaints = async (page = 1, filters = {}) => {
+  const fetchComplaints = async (page = 1, filters = {}, signal = null) => {
     setComplaintsLoading(true);
     try {
       const params = {
@@ -672,7 +890,10 @@ const AdminDashboard = () => {
         ...filters
       };
 
-      const response = await complaintService.getAllComplaints(params);
+      // Pass signal to service if it supports it
+      const response = await complaintService.getAllComplaints(params, signal);
+      
+      if (signal?.aborted) return;
       
       if (response.success) {
         setComplaints(response.data.complaints);
@@ -682,10 +903,15 @@ const AdminDashboard = () => {
         toast.error(response.message || 'Failed to fetch complaints');
       }
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        return;
+      }
       console.error('Error fetching complaints:', error);
       toast.error('Error fetching complaints');
     } finally {
-      setComplaintsLoading(false);
+      if (!signal?.aborted) {
+        setComplaintsLoading(false);
+      }
     }
   };
 
