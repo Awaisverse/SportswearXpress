@@ -26,7 +26,57 @@ const CategoryProducts = () => {
   ];
 
   useEffect(() => {
-    fetchProducts();
+    const abortController = new AbortController();
+    let isMounted = true;
+
+    const fetchProductsWithCleanup = async () => {
+      try {
+        setLoading(true);
+        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+        const response = await axios.get(`${API_URL}/api/v1/products`, {
+          signal: abortController.signal
+        });
+        
+        // Check if component is still mounted
+        if (!isMounted) return;
+        
+        if (response.data && Array.isArray(response.data)) {
+          // Filter for approved and isActive products only
+          const filtered = response.data.filter(
+            (p) => p.status === "approved" && p.isActive
+          );
+          setProducts(filtered);
+          setFilteredProducts(filtered);
+        } else {
+          setProducts([]);
+          setFilteredProducts([]);
+        }
+        setError(null);
+      } catch (error) {
+        // Ignore abort errors
+        if (error.name === 'AbortError' || error.name === 'CanceledError') {
+          return;
+        }
+        
+        if (isMounted) {
+          console.error("Error fetching products:", error);
+          setError("Failed to fetch products. Please try again later.");
+          setProducts([]);
+          setFilteredProducts([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchProductsWithCleanup();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, []);
 
   const fetchProducts = async () => {

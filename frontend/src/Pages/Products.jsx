@@ -33,7 +33,65 @@ const Products = () => {
   ];
 
   useEffect(() => {
-    fetchProducts();
+    const abortController = new AbortController();
+    let isMounted = true;
+
+    const fetchProductsWithCleanup = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        console.log("Fetching products from:", API_ENDPOINTS.PRODUCTS);
+        
+        const response = await fetch(API_ENDPOINTS.PRODUCTS, {
+          signal: abortController.signal
+        });
+        
+        // Check if component is still mounted
+        if (!isMounted) return;
+        
+        // Check if response is ok before trying to parse JSON
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("API Error Response:", errorText);
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log("Products API response:", data);
+        
+        if (!data.success) {
+          throw new Error(data.message || "Failed to fetch products");
+        }
+        
+        // Products are already filtered by status and isActive on the backend
+        const products = data.products || [];
+        
+        console.log("Products received:", products);
+        setProducts(products);
+        setFilteredProducts(products);
+      } catch (err) {
+        // Ignore abort errors
+        if (err.name === 'AbortError') {
+          return;
+        }
+        
+        if (isMounted) {
+          console.error("Error fetching products:", err);
+          setError(err.message);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchProductsWithCleanup();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, []);
 
   const fetchProducts = async () => {

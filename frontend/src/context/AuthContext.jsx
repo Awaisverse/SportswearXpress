@@ -10,6 +10,9 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const abortController = new AbortController();
+    let isMounted = true;
+
     const initializeAuth = async () => {
       try {
         const storedUser = localStorage.getItem('user');
@@ -20,8 +23,11 @@ export const AuthProvider = ({ children }) => {
             // Verify token validity with backend
             const response = await axios.get(`${API_URL}/api/v1/auth/verify-token`, {
               headers: { Authorization: `Bearer ${token}` },
-              timeout: 5000 // 5 second timeout
+              timeout: 5000, // 5 second timeout
+              signal: abortController.signal
             });
+            
+            if (!isMounted) return;
             
             if (response.data.valid && response.data.user) {
               setUser(response.data.user);
@@ -34,6 +40,13 @@ export const AuthProvider = ({ children }) => {
               setUser(null);
             }
           } catch (error) {
+            if (!isMounted) return;
+            
+            // Ignore abort errors
+            if (error.name === 'AbortError' || error.name === 'CanceledError') {
+              return;
+            }
+            
             console.error('Token verification error:', error);
             // If it's a network error or server is down, keep the user logged in
             // but don't update the user data
@@ -50,6 +63,8 @@ export const AuthProvider = ({ children }) => {
           }
         }
       } catch (error) {
+        if (!isMounted) return;
+        
         console.error('Auth initialization error:', error);
         // Only clear if it's a parsing error, not a network error
         if (error.name === 'SyntaxError') {
@@ -57,11 +72,18 @@ export const AuthProvider = ({ children }) => {
           localStorage.removeItem('user');
         }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     initializeAuth();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, []);
 
   const login = async (email, password, role) => {

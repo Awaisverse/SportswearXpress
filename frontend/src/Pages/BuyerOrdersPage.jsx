@@ -12,10 +12,119 @@ const BuyerOrdersPage = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const abortController = new AbortController();
+    let isMounted = true;
+
     // Only fetch orders if user is authenticated
     if (user && user.role === 'buyer') {
       console.log("User authenticated as buyer, fetching orders...");
-      fetchOrders();
+      
+      const fetchOrdersWithCleanup = async () => {
+        try {
+          if (!isMounted) return;
+          
+          setLoading(true);
+          const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+          const token = localStorage.getItem("token");
+          
+          console.log("=== Fetching Orders ===");
+          console.log("API_URL:", API_URL);
+          console.log("Token exists:", !!token);
+          console.log("User:", user);
+          
+          if (!token) {
+            if (isMounted) {
+              Swal.fire("Error", "Please login to view your orders", "error");
+            }
+            return;
+          }
+
+          // Decode token to see user info
+          try {
+            const tokenParts = token.split('.');
+            if (tokenParts.length === 3) {
+              const payload = JSON.parse(atob(tokenParts[1]));
+              console.log("Token payload:", payload);
+              console.log("Token user ID:", payload.id);
+              console.log("Token user role:", payload.role);
+            }
+          } catch (decodeError) {
+            console.error("Error decoding token:", decodeError);
+          }
+
+          // First check if backend is running
+          try {
+            console.log("Checking backend health...");
+            const healthResponse = await axios.get(`${API_URL}/api/health`, { 
+              timeout: 3000,
+              signal: abortController.signal
+            });
+            console.log("Backend health check successful:", healthResponse.data);
+          } catch (healthError) {
+            if (!isMounted) return;
+            
+            // Ignore abort errors
+            if (healthError.name === 'AbortError' || healthError.name === 'CanceledError') {
+              return;
+            }
+            
+            console.error("Backend health check failed:", healthError);
+            Swal.fire("Server Error", "Backend server is not running. Please start the server and try again.", "error");
+            setLoading(false);
+            return;
+          }
+
+          if (!isMounted) return;
+
+          console.log("Making request to:", `${API_URL}/api/v1/order/buyer`);
+          const response = await axios.get(`${API_URL}/api/v1/order/buyer`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            timeout: 10000, // 10 second timeout
+            signal: abortController.signal
+          });
+          
+          if (!isMounted) return;
+          
+          console.log("Order response:", response.data);
+          
+          if (response.data.success) {
+            console.log("Orders fetched successfully:", response.data.data.orders);
+            setOrders(response.data.data.orders);
+          } else {
+            console.error("API returned error:", response.data);
+            Swal.fire("Error", response.data.message || "Failed to fetch orders", "error");
+          }
+        } catch (error) {
+          if (!isMounted) return;
+          
+          // Ignore abort errors
+          if (error.name === 'AbortError' || error.name === 'CanceledError') {
+            return;
+          }
+          
+          console.error("Error fetching orders:", error);
+          console.error("Error response:", error.response?.data);
+          console.error("Error status:", error.response?.status);
+          
+          if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK') {
+            Swal.fire("Connection Error", "Unable to connect to server. Please check your internet connection and try again.", "error");
+          } else if (error.response?.status === 401) {
+            Swal.fire("Authentication Error", "Please login again to view your orders", "error");
+          } else if (error.response?.status === 404) {
+            Swal.fire("Not Found", "Orders endpoint not found. Please check if the backend is running correctly.", "error");
+          } else {
+            Swal.fire("Error", `Failed to fetch orders: ${error.response?.data?.message || error.message}`, "error");
+          }
+        } finally {
+          if (isMounted) {
+            setLoading(false);
+          }
+        }
+      };
+
+      fetchOrdersWithCleanup();
     } else if (user && user.role !== 'buyer') {
       console.log("User is not a buyer, role:", user.role);
       setLoading(false);
@@ -25,6 +134,11 @@ const BuyerOrdersPage = () => {
       setLoading(false);
       // User is not authenticated, this will be handled by the ProtectedRoute
     }
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [user]);
 
   const fetchOrders = async () => {
