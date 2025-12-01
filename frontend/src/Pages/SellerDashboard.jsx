@@ -27,6 +27,9 @@ const SellerDashboard = () => {
   });
 
   useEffect(() => {
+    const abortController = new AbortController();
+    let isMounted = true;
+
     // Set active tab based on URL
     if (location.pathname === '/seller/orders') {
       setActiveTab('orders');
@@ -34,25 +37,61 @@ const SellerDashboard = () => {
       setActiveTab('products');
     }
     
-    fetchProducts();
-    fetchStats();
+    const fetchWithCleanup = async () => {
+      if (!isMounted) return;
+      
+      try {
+        await Promise.all([
+          fetchProducts(abortController.signal),
+          fetchStats(abortController.signal)
+        ]);
+      } catch (error) {
+        if (isMounted && error.name !== 'AbortError' && error.name !== 'CanceledError') {
+          console.error('Error fetching dashboard data:', error);
+        }
+      }
+    };
+
+    fetchWithCleanup();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [location.pathname]);
 
   // Auto-refresh dashboard every 30 seconds
   useEffect(() => {
+    const abortController = new AbortController();
+    let isMounted = true;
+
     const interval = setInterval(() => {
+      if (!isMounted) {
+        clearInterval(interval);
+        return;
+      }
+      
       if (activeTab === 'products') {
         setIsAutoRefreshing(true);
-        Promise.all([fetchProducts(), fetchStats()]).finally(() => {
-          setIsAutoRefreshing(false);
+        Promise.all([
+          fetchProducts(abortController.signal),
+          fetchStats(abortController.signal)
+        ]).finally(() => {
+          if (isMounted) {
+            setIsAutoRefreshing(false);
+          }
         });
       }
     }, 30000); // 30 seconds
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      abortController.abort();
+    };
   }, [activeTab]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (signal = null) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -67,11 +106,22 @@ const SellerDashboard = () => {
       console.log('API URL:', apiUrl);
       console.log('Fetching products from:', `${apiUrl}/api/v1/seller/products`);
       
-      const response = await fetch(`${apiUrl}/api/v1/seller/products`, {
+      const fetchOptions = {
         headers: {
           'Authorization': `Bearer ${token}`
         }
-      });
+      };
+      
+      if (signal) {
+        fetchOptions.signal = signal;
+      }
+      
+      const response = await fetch(`${apiUrl}/api/v1/seller/products`, fetchOptions);
+
+      // Check if request was aborted
+      if (signal?.aborted) {
+        return;
+      }
 
       // Check if response is ok before trying to parse JSON
       if (!response.ok) {
@@ -81,6 +131,12 @@ const SellerDashboard = () => {
       }
 
       const data = await response.json();
+      
+      // Check again if request was aborted before setting state
+      if (signal?.aborted) {
+        return;
+      }
+      
       console.log('Products response:', data);
 
       if (data.success) {
@@ -95,6 +151,11 @@ const SellerDashboard = () => {
         throw new Error(data.message || 'Failed to fetch products');
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError' || signal?.aborted) {
+        return;
+      }
+      
       console.error('Error fetching products:', error);
       toast.error(error.message || 'Failed to fetch products');
       
@@ -103,11 +164,13 @@ const SellerDashboard = () => {
         navigate('/signin');
       }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
-  const fetchStats = async () => {
+  const fetchStats = async (signal = null) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -122,11 +185,22 @@ const SellerDashboard = () => {
       console.log('API URL:', apiUrl);
       console.log('Fetching dashboard data from:', `${apiUrl}/api/v1/seller/dashboard`);
       
-      const response = await fetch(`${apiUrl}/api/v1/seller/dashboard`, {
+      const fetchOptions = {
         headers: {
           'Authorization': `Bearer ${token}`
         }
-      });
+      };
+      
+      if (signal) {
+        fetchOptions.signal = signal;
+      }
+      
+      const response = await fetch(`${apiUrl}/api/v1/seller/dashboard`, fetchOptions);
+
+      // Check if request was aborted
+      if (signal?.aborted) {
+        return;
+      }
 
       // Check if response is ok before trying to parse JSON
       if (!response.ok) {
@@ -136,6 +210,12 @@ const SellerDashboard = () => {
       }
 
       const data = await response.json();
+      
+      // Check again if request was aborted before setting state
+      if (signal?.aborted) {
+        return;
+      }
+      
       console.log('Dashboard data response:', data);
 
       if (data.success) {
@@ -150,6 +230,11 @@ const SellerDashboard = () => {
         throw new Error(data.message || 'Failed to fetch dashboard data');
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError' || signal?.aborted) {
+        return;
+      }
+      
       console.error('Error fetching stats:', error);
       toast.error(error.message || 'Failed to fetch dashboard statistics');
       
