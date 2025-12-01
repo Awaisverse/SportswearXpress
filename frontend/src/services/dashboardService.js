@@ -3,25 +3,34 @@ import axios from "axios";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 class DashboardService {
-  async getDashboardStats() {
+  async getDashboardStats(signal = null) {
     try {
       console.log(
         "Fetching dashboard stats from:",
         `${API_URL}/api/v1/admin/dashboard/stats`
       );
 
+      const config = {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      };
+      
+      if (signal) {
+        config.signal = signal;
+      }
+
       const response = await axios.get(
         `${API_URL}/api/v1/admin/dashboard/stats`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
+        config
       );
 
       console.log("Dashboard stats response:", response.data);
       return response.data.stats;
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        throw error;
+      }
       console.error("Dashboard stats error:", error);
       console.error("Error response:", error.response?.data);
 
@@ -38,33 +47,47 @@ class DashboardService {
     }
   }
 
-  async getPendingProducts() {
+  async getPendingProducts(signal = null) {
     try {
+      const config = {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      };
+      if (signal) {
+        config.signal = signal;
+      }
       const response = await axios.get(
         `${API_URL}/api/admin/pending-products`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
+        config
       );
       return response.data;
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        throw error;
+      }
       throw new Error(
         error.response?.data?.message || "Failed to fetch pending products"
       );
     }
   }
 
-  async getPendingSellers() {
+  async getPendingSellers(signal = null) {
     try {
-      const response = await axios.get(`${API_URL}/api/admin/pending-sellers`, {
+      const config = {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-      });
+      };
+      if (signal) {
+        config.signal = signal;
+      }
+      const response = await axios.get(`${API_URL}/api/admin/pending-sellers`, config);
       return response.data;
     } catch (error) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        throw error;
+      }
       throw new Error(
         error.response?.data?.message || "Failed to fetch pending sellers"
       );

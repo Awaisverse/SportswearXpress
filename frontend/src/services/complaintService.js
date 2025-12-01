@@ -22,11 +22,19 @@ class ComplaintService {
   }
 
   // Get all complaints (admin only)
-  async getAllComplaints(params = {}) {
+  async getAllComplaints(params = {}, signal = null) {
     try {
-      const response = await this.api.get("/admin/all", { params });
+      const config = { params };
+      if (signal) {
+        config.signal = signal;
+      }
+      const response = await this.api.get("/admin/all", config);
       return response.data;
     } catch (error) {
+      // Don't throw abort errors
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || signal?.aborted) {
+        throw error;
+      }
       throw this.handleError(error);
     }
   }
